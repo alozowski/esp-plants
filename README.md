@@ -5,12 +5,12 @@
 This ESPHome configuration runs on an ESP32 (M5Stack Atom) to monitor soil moisture, temperature, light, and conductivity using Xiaomi Mi Flora sensors. It provides real-time updates via Slack notifications and includes a web server for remote access.
 
 # Features
-- Soil monitoring: Tracks moisture, temperature, light, and conductivity for multiple plants.
-- Automated alerts: Sends Slack notifications when a plant needs watering or when conditions improve.
-- Scheduled reports: Posts a summary of sensor readings every Monday and Thursday at 10 AM.
-- Button-triggered updates: A physical button press sends an instant plant status report.
-- Status LED feedback: Indicates successful or failed Slack message delivery.
- -Web server access: View real-time sensor data through a simple web interface.
+- **Soil monitoring:** Tracks moisture, temperature, light, and conductivity for multiple plants.
+- **Automated alerts:** Sends Slack notifications when a plant needs watering or when conditions improve.
+- **Scheduled reports:** Posts a summary of sensor readings every Monday and Thursday at 10 AM.
+- **Button-triggered updates:** A physical button press sends an instant plant status report.
+- **Status LED feedback:** Indicates successful or failed Slack message delivery.
+- **Web server access:** View real-time sensor data through a simple web interface.
 
 # Hardware
 - ESP32 (M5Stack Atom)
