@@ -6,7 +6,7 @@ This ESPHome configuration runs on an ESP32 (M5Stack Atom) to monitor soil moist
 
 # Features
 - **Soil monitoring:** Tracks moisture, temperature, light, and conductivity for multiple plants.
-- **Automated alerts:** Sends Slack notifications when a plant needs watering or when conditions improve.
+- **Automated alerts:** Sends Slack notifications when a plant needs watering (below 30% moisture) and when it recovers (above 30% moisture). Can be set up for each flower separately. 
 - **Scheduled reports:** Posts a summary of sensor readings every Monday and Thursday at 10 AM.
 - **Button-triggered updates:** A physical button press sends an instant plant status report.
 - **Status LED feedback:** Indicates successful or failed Slack message delivery.
