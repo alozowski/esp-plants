@@ -1,0 +1,233 @@
+esphome:
+  name: esp32-mi-flora-3rd-floor
+  on_boot:
+    - priority: -100
+      then:
+        - script.execute:
+            id: send_slack_message
+            message: "✨ 3rd floor esp32 booted up!"
+
+esp32:
+  board: m5stack-atom
+  framework:
+    type: esp-idf
+
+wifi:
+  ssid: "HuggingFace Guests"
+  password: !secret wifi_password
+  fast_connect: true
+
+  # Enable fallback hotspot (in case of connection issues)
+  ap:
+    ssid: "ESP32_Fallback"
+
+# Webserver setup
+web_server:
+  port: 80
+  version: 1
+  ota: false
+
+# Example configuration entry
+http_request:
+  useragent: esphome/device
+  verify_ssl: false
+  timeout: 10s
+
+logger:
+  level: DEBUG
+
+substitutions:
+  slack_webhook_url: !secret slack_webhook_url
+
+light:
+  - platform: esp32_rmt_led_strip
+    chipset: SK6812
+    pin: 27
+    num_leds: 1
+    # rmt_channel: 0
+    rgb_order: GRB
+    id: status_led
+    name: "Status LED"
+    effects:
+      - pulse:
+          name: "Slow Pulse"
+          transition_length: 500ms
+          update_interval: 2s
+
+script:
+  - id: send_slack_message
+    parameters:
+      message: string
+    then:
+      - http_request.post:
+          url: ${slack_webhook_url}
+          headers:
+            Content-Type: application/json
+          json:
+            text: !lambda return message;
+          on_response:
+            then:
+              - if:
+                  condition:
+                    lambda: return response->status_code == 200;
+                  then:
+                    - light.turn_on:
+                        id: status_led
+                        brightness: 50%
+                        red: 0
+                        green: 0
+                        blue: 1
+                        flash_length: 500ms
+                  else:
+                    - logger.log: "Slack post request failed!"
+                    - light.turn_on:
+                        id: status_led
+                        brightness: 50%
+                        red: 1
+                        green: 0
+                        blue: 0
+                        flash_length: 500ms
+          on_error:
+            then:
+              - logger.log: "Slack post request failed!"
+              - light.turn_on:
+                  id: status_led
+                  brightness: 50%
+                  red: 1
+                  green: 0
+                  blue: 0
+                  flash_length: 500ms
+
+  - id: send_plants_status_message
+    then:
+      - script.execute:
+          id: send_slack_message
+          message: !lambda |-
+            std::string message = "🗓️ Current sensor readings for 3rd floor:\n";
+            message += "💧 Marcel's soil moisture: " + value_accuracy_to_string(id(marcel_moisture).state, 1) + "%\n";
+            message += "🌡️ Marcel's soil temperature: " + value_accuracy_to_string(id(marcel_temperature).state, 1) + "°C\n";
+            message += "\n";
+            message += "💧 Jean-Paul's soil moisture: " + value_accuracy_to_string(id(jean_paul_moisture).state, 1) + "%\n";
+            message += "🌡️ Jean-Paul's soil temperature: " + value_accuracy_to_string(id(jean_paul_temperature).state, 1) + "°C\n";
+            message += "\n";
+            message += "💧 Colette's soil moisture: " + value_accuracy_to_string(id(colette_moisture).state, 1) + "%\n";
+            message += "🌡️ Colette's soil temperature: " + value_accuracy_to_string(id(colette_temperature).state, 1) + "°C\n";
+            return message;
+
+time:
+  - platform: sntp
+    on_time:
+      - seconds: 0
+        minutes: 00
+        hours: 10
+        days_of_week: MON,THU
+        then:
+          - script.execute:
+              id: send_plants_status_message
+
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: 39
+      inverted: true
+    name: Button
+    on_press:
+      then:
+        - script.execute:
+            id: send_plants_status_message
+
+esp32_ble_tracker:
+  scan_parameters:
+    active: false
+
+sensor:
+  - platform: xiaomi_hhccjcy01
+    mac_address: !secret marcel_address
+    temperature:
+      id: marcel_temperature
+      name: "Marcel's sensor temperature"
+    moisture:
+      id: marcel_moisture
+      name: "Marcel's sensor moisture"
+      on_value_range:
+        - below: 30.0
+          then:
+            - script.execute:
+                id: send_slack_message
+                message: "🌿 Marcel (3rd floor) needs water! Moisture is below 30%"
+        - above: 35.0
+          then:
+            - script.execute:
+                id: send_slack_message
+                message: "✅ Marcel (3rd floor) is happy! Watered and thriving again"
+    illuminance:
+      id: marcel_light
+      name: "Marcel's sensor light"
+    conductivity:
+      id: marcel_conductivity
+      name: "Marcel's sensor conductivity"
+    battery_level:
+      id: marcel_battery_level
+      name: "Marcel's sensor battery"
+
+  - platform: xiaomi_hhccjcy01
+    mac_address: !secret jean_paul_address
+    temperature:
+      id: jean_paul_temperature
+      name: "Jean-Paul's sensor temperature"
+    moisture:
+      id: jean_paul_moisture
+      name: "Jean-Paul's sensor moisture"
+      on_value_range:
+        - below: 20.0
+          then:
+            - script.execute:
+                id: send_slack_message
+                message: "🌿 Jean-Paul (3rd floor) needs water! Moisture is below 30%"
+        - above: 30.0
+          then:
+            - script.execute:
+                id: send_slack_message
+                message: "✅ Jean-Paul (3rd floor) is happy! Watered and thriving again"
+    illuminance:
+      id: jean_paul_illuminance
+      name: "Jean-Paul's sensor light"
+    conductivity:
+      id: jean_paul_conductivity
+      name: "Jean-Paul's sensor conductivity"
+    battery_level:
+      id: jean_paul_battery_level
+      name: "Jean-Paul's sensor battery"
+  
+  - platform: xiaomi_hhccjcy01
+    mac_address: !secret colette_address
+    temperature:
+      id: colette_temperature
+      name: "Colette's sensor temperature"
+    moisture:
+      id: colette_moisture
+      name: "Colette's sensor moisture"
+      on_value_range:
+        - below: 30.0
+          then:
+            - script.execute:
+                id: send_slack_message
+                message: "🌿 Colette (3rd floor) needs water! Moisture is below 30%"
+        - above: 35.0
+          then:
+            - script.execute:
+                id: send_slack_message
+                message: "✅ Colette (3rd floor) is happy! Watered and thriving again"
+    illuminance:
+      id: colette_illuminance
+      name: "Colette's sensor light"
+    conductivity:
+      id: colette_conductivity
+      name: "Colette's sensor conductivity"
+    battery_level:
+      id: colette_battery_level
+      name: "Colette's sensor battery"
+
+# text_sensor:
+#   - platform: ble_scanner
+#     name: "BLE Devices Scanner"
