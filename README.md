@@ -6,7 +6,9 @@ This ESPHome configuration runs on an ESP32 (M5Stack Atom) to monitor soil moist
 
 # Features
 - **Soil monitoring:** Tracks moisture, temperature, light, and conductivity for multiple plants.
-- **Automated alerts:** Sends Slack notifications when a plant needs watering (below 30% moisture) and when it recovers (above 30% moisture). Can be set up for each flower separately. 
+- **Automated alerts:** Sends Slack notifications when a plant needs watering (below 20% moisture) and when it recovers (above 25% moisture). Can be set up for each flower separately.
+- **Debounced notifications:** Prevents excessive messages by introducing a 10-second delay before confirming moisture changes.
+- **State tracking:** Uses internal flags to ensure each notification is sent only once per watering cycle.
 - **Scheduled reports:** Posts a summary of sensor readings every Monday and Thursday at 10 AM.
 - **Button-triggered updates:** A physical button press sends an instant plant status report.
 - **Status LED feedback:** Indicates successful or failed Slack message delivery.
@@ -49,7 +51,7 @@ You can monitor the metrics using a webserver. It can be accessed by `<name>.loc
 > **NOTE:**  The ESP32 must be plugged into your computer during flashing. After flashing, it can run independently when connected to a power source.
 
 # TODO:
-- [ ] Debug notification frequency to avoid excessive messages.
-- [ ] Compare memory efficiency between ESPHome and MicroPython.
+- [x] Debug notification frequency to avoid excessive messages.
+- [x] Compare memory efficiency between ESPHome and MicroPython. UPD: ESPHome should be more memory efficient.
 - [ ] Scale the system to cover all office floors.
 - [ ] Encapsulate IoT Wi-Fi connectivity by setting up a dedicated SSID or VLAN for ESP32 devices to improve security and stability.
