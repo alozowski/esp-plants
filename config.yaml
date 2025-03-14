@@ -44,7 +44,6 @@ light:
     chipset: SK6812
     pin: 27
     num_leds: 1
-    # rmt_channel: 0
     rgb_order: GRB
     id: status_led
     name: "Status LED"
@@ -53,6 +52,26 @@ light:
           name: "Slow Pulse"
           transition_length: 500ms
           update_interval: 2s
+
+globals:
+  - id: marcel_needs_water_notified
+    type: bool
+    initial_value: "false"
+  - id: marcel_happy_notified
+    type: bool
+    initial_value: "false"
+  - id: jean_paul_needs_water_notified
+    type: bool
+    initial_value: "false"
+  - id: jean_paul_happy_notified
+    type: bool
+    initial_value: "false"
+  - id: colette_needs_water_notified
+    type: bool
+    initial_value: "false"
+  - id: colette_happy_notified
+    type: bool
+    initial_value: "false"
 
 script:
   - id: send_slack_message
@@ -103,7 +122,7 @@ script:
       - script.execute:
           id: send_slack_message
           message: !lambda |-
-            std::string message = "🗓️ Current sensor readings for 3rd floor:\n";
+            std::string message = "🗓️ Current sensors' readings for the 3rd floor:\n";
             message += "💧 Marcel's soil moisture: " + value_accuracy_to_string(id(marcel_moisture).state, 1) + "%\n";
             message += "🌡️ Marcel's soil temperature: " + value_accuracy_to_string(id(marcel_temperature).state, 1) + "°C\n";
             message += "\n";
@@ -141,6 +160,7 @@ esp32_ble_tracker:
     active: false
 
 sensor:
+  # Marcel's Sensors (First)
   - platform: xiaomi_hhccjcy01
     mac_address: !secret marcel_address
     temperature:
@@ -150,16 +170,41 @@ sensor:
       id: marcel_moisture
       name: "Marcel's sensor moisture"
       on_value_range:
-        - below: 30.0
+        - below: 19.5
           then:
-            - script.execute:
-                id: send_slack_message
-                message: "🌿 Marcel (3rd floor) needs water! Moisture is below 30%"
-        - above: 35.0
+            - if:
+                condition:
+                  lambda: "return !id(marcel_needs_water_notified);"
+                then:
+                  - delay: 10s  # Debounce for 10 seconds before confirming low moisture
+                  - if:
+                      condition:
+                        lambda: "return id(marcel_moisture).state < 19.5;"  # Check again after delay
+                      then:
+                        - lambda: |
+                            id(marcel_needs_water_notified) = true;
+                            id(marcel_happy_notified) = false;
+                        - script.execute:
+                            id: send_slack_message
+                            message: "🌿 Marcel (3rd floor) needs water! Moisture is below 20%"
+
+        - above: 25.0
           then:
-            - script.execute:
-                id: send_slack_message
-                message: "✅ Marcel (3rd floor) is happy! Watered and thriving again"
+            - if:
+                condition:
+                  lambda: "return !id(marcel_happy_notified);"
+                then:
+                  - delay: 10s  # Debounce for 10 seconds before confirming recovery
+                  - if:
+                      condition:
+                        lambda: "return id(marcel_moisture).state > 25.0;"  # Check again after delay
+                      then:
+                        - lambda: |
+                            id(marcel_happy_notified) = true;
+                            id(marcel_needs_water_notified) = false;
+                        - script.execute:
+                            id: send_slack_message
+                            message: "✅ Marcel (3rd floor) is happy! Watered and thriving again"
     illuminance:
       id: marcel_light
       name: "Marcel's sensor light"
@@ -170,6 +215,7 @@ sensor:
       id: marcel_battery_level
       name: "Marcel's sensor battery"
 
+  # Jean-Paul's Sensors (Second)
   - platform: xiaomi_hhccjcy01
     mac_address: !secret jean_paul_address
     temperature:
@@ -179,16 +225,41 @@ sensor:
       id: jean_paul_moisture
       name: "Jean-Paul's sensor moisture"
       on_value_range:
-        - below: 20.0
+        - below: 19.5
           then:
-            - script.execute:
-                id: send_slack_message
-                message: "🌿 Jean-Paul (3rd floor) needs water! Moisture is below 30%"
-        - above: 30.0
+            - if:
+                condition:
+                  lambda: "return !id(jean_paul_needs_water_notified);"
+                then:
+                  - delay: 10s  # Debounce for 10 seconds before confirming low moisture
+                  - if:
+                      condition:
+                        lambda: "return id(jean_paul_moisture).state < 19.5;"  # Check again after delay
+                      then:
+                        - lambda: |
+                            id(jean_paul_needs_water_notified) = true;
+                            id(jean_paul_happy_notified) = false;
+                        - script.execute:
+                            id: send_slack_message
+                            message: "🌿 Jean-Paul (3rd floor) needs water! Moisture is below 20%"
+
+        - above: 25.0
           then:
-            - script.execute:
-                id: send_slack_message
-                message: "✅ Jean-Paul (3rd floor) is happy! Watered and thriving again"
+            - if:
+                condition:
+                  lambda: "return !id(jean_paul_happy_notified);"
+                then:
+                  - delay: 10s  # Debounce for 10 seconds before confirming recovery
+                  - if:
+                      condition:
+                        lambda: "return id(jean_paul_moisture).state > 25.0;"  # Check again after delay
+                      then:
+                        - lambda: |
+                            id(jean_paul_happy_notified) = true;
+                            id(jean_paul_needs_water_notified) = false;
+                        - script.execute:
+                            id: send_slack_message
+                            message: "✅ Jean-Paul (3rd floor) is happy! Watered and thriving again"
     illuminance:
       id: jean_paul_illuminance
       name: "Jean-Paul's sensor light"
@@ -198,7 +269,8 @@ sensor:
     battery_level:
       id: jean_paul_battery_level
       name: "Jean-Paul's sensor battery"
-  
+
+  # Colette's Sensors (Last)
   - platform: xiaomi_hhccjcy01
     mac_address: !secret colette_address
     temperature:
@@ -208,16 +280,41 @@ sensor:
       id: colette_moisture
       name: "Colette's sensor moisture"
       on_value_range:
-        - below: 30.0
+        - below: 19.5
           then:
-            - script.execute:
-                id: send_slack_message
-                message: "🌿 Colette (3rd floor) needs water! Moisture is below 30%"
-        - above: 35.0
+            - if:
+                condition:
+                  lambda: "return !id(colette_needs_water_notified);"
+                then:
+                  - delay: 10s  # Debounce for 10 seconds before confirming low moisture
+                  - if:
+                      condition:
+                        lambda: "return id(colette_moisture).state < 19.5;"  # Check again after delay
+                      then:
+                        - lambda: |
+                            id(colette_needs_water_notified) = true;
+                            id(colette_happy_notified) = false;
+                        - script.execute:
+                            id: send_slack_message
+                            message: "🌿 Colette (3rd floor) needs water! Moisture is below 20%"
+
+        - above: 25.0
           then:
-            - script.execute:
-                id: send_slack_message
-                message: "✅ Colette (3rd floor) is happy! Watered and thriving again"
+            - if:
+                condition:
+                  lambda: "return !id(colette_happy_notified);"
+                then:
+                  - delay: 10s  # Debounce for 10 seconds before confirming recovery
+                  - if:
+                      condition:
+                        lambda: "return id(colette_moisture).state > 25.0;"  # Check again after delay
+                      then:
+                        - lambda: |
+                            id(colette_happy_notified) = true;
+                            id(colette_needs_water_notified) = false;
+                        - script.execute:
+                            id: send_slack_message
+                            message: "✅ Colette (3rd floor) is happy! Watered and thriving again"
     illuminance:
       id: colette_illuminance
       name: "Colette's sensor light"
@@ -227,7 +324,3 @@ sensor:
     battery_level:
       id: colette_battery_level
       name: "Colette's sensor battery"
-
-# text_sensor:
-#   - platform: ble_scanner
-#     name: "BLE Devices Scanner"
