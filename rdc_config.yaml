@@ -1,0 +1,455 @@
+esphome:
+  name: esp32-mi-flora-rdc
+  on_boot:
+    - priority: -100
+      then:
+        - script.execute:
+            id: send_slack_message
+            message: "✨ RDC esp32 booted up!"
+
+esp32:
+  board: m5stack-atom
+  framework:
+    type: esp-idf
+
+wifi:
+  ssid: "HuggingFace Guests"
+  password: !secret wifi_password
+  fast_connect: true
+
+  # Enable fallback hotspot (in case of connection issues)
+  ap:
+    ssid: "ESP32_Fallback"
+
+# Webserver setup
+web_server:
+  port: 80
+  version: 1
+  ota: false
+
+# Example configuration entry
+http_request:
+  useragent: esphome/device
+  verify_ssl: false
+  timeout: 10s
+
+logger:
+  level: DEBUG
+
+substitutions:
+  slack_webhook_url: !secret slack_webhook_url
+
+light:
+  - platform: esp32_rmt_led_strip
+    chipset: SK6812
+    pin: 27
+    num_leds: 1
+    rgb_order: GRB
+    id: status_led
+    name: "Status LED"
+    effects:
+      - pulse:
+          name: "Slow Pulse"
+          transition_length: 500ms
+          update_interval: 2s
+
+globals:
+  - id: emilie_needs_water_notified
+    type: bool
+    initial_value: "false"
+  - id: emilie_happy_notified
+    type: bool
+    initial_value: "false"
+  - id: michel_needs_water_notified
+    type: bool
+    initial_value: "false"
+  - id: michel_happy_notified
+    type: bool
+    initial_value: "false"
+  - id: rene_needs_water_notified
+    type: bool
+    initial_value: "false"
+  - id: rene_happy_notified
+    type: bool
+    initial_value: "false"
+  - id: simone_needs_water_notified
+    type: bool
+    initial_value: "false"
+  - id: simone_happy_notified
+    type: bool
+    initial_value: "false"
+  - id: jean_jacques_needs_water_notified
+    type: bool
+    initial_value: "false"
+  - id: jean_jacques_happy_notified
+    type: bool
+    initial_value: "false"
+
+script:
+  - id: send_slack_message
+    parameters:
+      message: string
+    then:
+      - http_request.post:
+          url: ${slack_webhook_url}
+          headers:
+            Content-Type: application/json
+          json:
+            text: !lambda return message;
+          on_response:
+            then:
+              - if:
+                  condition:
+                    lambda: return response->status_code == 200;
+                  then:
+                    - light.turn_on:
+                        id: status_led
+                        brightness: 50%
+                        red: 0
+                        green: 0
+                        blue: 1
+                        flash_length: 500ms
+                  else:
+                    - logger.log: "Slack post request failed!"
+                    - light.turn_on:
+                        id: status_led
+                        brightness: 50%
+                        red: 1
+                        green: 0
+                        blue: 0
+                        flash_length: 500ms
+          on_error:
+            then:
+              - logger.log: "Slack post request failed!"
+              - light.turn_on:
+                  id: status_led
+                  brightness: 50%
+                  red: 1
+                  green: 0
+                  blue: 0
+                  flash_length: 500ms
+
+  - id: send_plants_status_message
+    then:
+      - script.execute:
+          id: send_slack_message
+          message: !lambda |-
+            std::string message = "🗓️ Current sensors' readings for the RDC:\n";
+            message += "💧 Émilie's soil moisture: " + value_accuracy_to_string(id(emilie_moisture).state, 1) + "%\n";
+            message += "🌡️ Émilie's soil temperature: " + value_accuracy_to_string(id(emilie_temperature).state, 1) + "°C\n";
+            message += "\n";
+            message += "💧 Michel's soil moisture: " + value_accuracy_to_string(id(michel_moisture).state, 1) + "%\n";
+            message += "🌡️ Michel's soil temperature: " + value_accuracy_to_string(id(michel_temperature).state, 1) + "°C\n";
+            message += "\n";
+            message += "💧 René's soil moisture: " + value_accuracy_to_string(id(rene_moisture).state, 1) + "%\n";
+            message += "🌡️ René's soil temperature: " + value_accuracy_to_string(id(rene_temperature).state, 1) + "°C\n";
+            message += "\n";
+            message += "💧 Simone's soil moisture: " + value_accuracy_to_string(id(simone_moisture).state, 1) + "%\n";
+            message += "🌡️ Simone's soil temperature: " + value_accuracy_to_string(id(simone_temperature).state, 1) + "°C\n";
+            message += "\n";
+            message += "💧 Jean-Jacques's soil moisture: " + value_accuracy_to_string(id(jean_jacques_moisture).state, 1) + "%\n";
+            message += "🌡️ Jean-Jacques's soil temperature: " + value_accuracy_to_string(id(jean_jacques_temperature).state, 1) + "°C\n";
+            return message;
+
+time:
+  - platform: sntp
+    on_time:
+      - seconds: 0
+        minutes: 00
+        hours: 10
+        days_of_week: MON,THU
+        then:
+          - script.execute:
+              id: send_plants_status_message
+
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: 39
+      inverted: true
+    name: Button
+    on_press:
+      then:
+        - script.execute:
+            id: send_plants_status_message
+
+esp32_ble_tracker:
+  scan_parameters:
+    active: false
+
+sensor:
+  # Emilie's Sensors (First)
+  - platform: xiaomi_hhccjcy01
+    mac_address: !secret emilie_address
+    temperature:
+      id: emilie_temperature
+      name: "Emilie's sensor temperature"
+    moisture:
+      id: emilie_moisture
+      name: "Emilie's sensor moisture"
+      on_value_range:
+        - below: 19.5
+          then:
+            - if:
+                condition:
+                  lambda: "return !id(emilie_needs_water_notified);"
+                then:
+                  - delay: 10s  # Debounce for 10 seconds before confirming low moisture
+                  - if:
+                      condition:
+                        lambda: "return id(emilie_moisture).state < 19.5;"  # Check again after delay
+                      then:
+                        - lambda: |
+                            id(emilie_needs_water_notified) = true;
+                            id(emilie_happy_notified) = false;
+                        - script.execute:
+                            id: send_slack_message
+                            message: "🪴 Émilie (RDC) needs water! Moisture is below 20%"
+
+        - above: 25.0
+          then:
+            - if:
+                condition:
+                  lambda: "return !id(emilie_happy_notified);"
+                then:
+                  - delay: 10s  # Debounce for 10 seconds before confirming recovery
+                  - if:
+                      condition:
+                        lambda: "return id(emilie_moisture).state > 25.0;"  # Check again after delay
+                      then:
+                        - lambda: |
+                            id(emilie_happy_notified) = true;
+                            id(emilie_needs_water_notified) = false;
+                        - script.execute:
+                            id: send_slack_message
+                            message: "✅ Émilie (RDC) is happy! Watered and thriving again"
+    illuminance:
+      id: emilie_light
+      name: "Emilie's sensor light"
+    conductivity:
+      id: emilie_conductivity
+      name: "Emilie's sensor conductivity"
+    battery_level:
+      id: emilie_battery_level
+      name: "Emilie's sensor battery"
+
+  # Michel's Sensors (Second)
+  - platform: xiaomi_hhccjcy01
+    mac_address: !secret michel_address
+    temperature:
+      id: michel_temperature
+      name: "Michel's sensor temperature"
+    moisture:
+      id: michel_moisture
+      name: "Michel's sensor moisture"
+      on_value_range:
+        - below: 19.5
+          then:
+            - if:
+                condition:
+                  lambda: "return !id(michel_needs_water_notified);"
+                then:
+                  - delay: 10s  # Debounce for 10 seconds before confirming low moisture
+                  - if:
+                      condition:
+                        lambda: "return id(michel_moisture).state < 19.5;"  # Check again after delay
+                      then:
+                        - lambda: |
+                            id(michel_needs_water_notified) = true;
+                            id(michel_happy_notified) = false;
+                        - script.execute:
+                            id: send_slack_message
+                            message: "🪴 Michel (RDC) needs water! Moisture is below 20%"
+
+        - above: 25.0
+          then:
+            - if:
+                condition:
+                  lambda: "return !id(michel_happy_notified);"
+                then:
+                  - delay: 10s  # Debounce for 10 seconds before confirming recovery
+                  - if:
+                      condition:
+                        lambda: "return id(michel_moisture).state > 25.0;"  # Check again after delay
+                      then:
+                        - lambda: |
+                            id(michel_happy_notified) = true;
+                            id(michel_needs_water_notified) = false;
+                        - script.execute:
+                            id: send_slack_message
+                            message: "✅ Michel (RDC) is happy! Watered and thriving again"
+    illuminance:
+      id: michel_light
+      name: "Michel's sensor light"
+    conductivity:
+      id: michel_conductivity
+      name: "Michel's sensor conductivity"
+    battery_level:
+      id: michel_battery_level
+      name: "Michel's sensor battery"
+
+  # René's Sensors (Third)
+  - platform: xiaomi_hhccjcy01
+    mac_address: !secret rene_address
+    temperature:
+      id: rene_temperature
+      name: "René's sensor temperature"
+    moisture:
+      id: rene_moisture
+      name: "René's sensor moisture"
+      on_value_range:
+        - below: 19.5
+          then:
+            - if:
+                condition:
+                  lambda: "return !id(rene_needs_water_notified);"
+                then:
+                  - delay: 10s  # Debounce for 10 seconds before confirming low moisture
+                  - if:
+                      condition:
+                        lambda: "return id(rene_moisture).state < 19.5;"  # Check again after delay
+                      then:
+                        - lambda: |
+                            id(rene_needs_water_notified) = true;
+                            id(rene_happy_notified) = false;
+                        - script.execute:
+                            id: send_slack_message
+                            message: "🪴 René (RDC) needs water! Moisture is below 20%"
+
+        - above: 25.0
+          then:
+            - if:
+                condition:
+                  lambda: "return !id(rene_happy_notified);"
+                then:
+                  - delay: 10s  # Debounce for 10 seconds before confirming recovery
+                  - if:
+                      condition:
+                        lambda: "return id(rene_moisture).state > 25.0;"  # Check again after delay
+                      then:
+                        - lambda: |
+                            id(rene_happy_notified) = true;
+                            id(rene_needs_water_notified) = false;
+                        - script.execute:
+                            id: send_slack_message
+                            message: "✅ René (RDC) is happy! Watered and thriving again"
+    illuminance:
+      id: rene_light
+      name: "René's sensor light"
+    conductivity:
+      id: rene_conductivity
+      name: "René's sensor conductivity"
+    battery_level:
+      id: rene_battery_level
+      name: "René's sensor battery"
+
+  # Simone's Sensors (Fourth)
+  - platform: xiaomi_hhccjcy01
+    mac_address: !secret simone_address
+    temperature:
+      id: simone_temperature
+      name: "Simone's sensor temperature"
+    moisture:
+      id: simone_moisture
+      name: "Simone's sensor moisture"
+      on_value_range:
+        - below: 19.5
+          then:
+            - if:
+                condition:
+                  lambda: "return !id(simone_needs_water_notified);"
+                then:
+                  - delay: 10s  # Debounce for 10 seconds before confirming low moisture
+                  - if:
+                      condition:
+                        lambda: "return id(simone_moisture).state < 19.5;"  # Check again after delay
+                      then:
+                        - lambda: |
+                            id(simone_needs_water_notified) = true;
+                            id(simone_happy_notified) = false;
+                        - script.execute:
+                            id: send_slack_message
+                            message: "🪴 Simone (RDC) needs water! Moisture is below 20%"
+
+        - above: 25.0
+          then:
+            - if:
+                condition:
+                  lambda: "return !id(simone_happy_notified);"
+                then:
+                  - delay: 10s  # Debounce for 10 seconds before confirming recovery
+                  - if:
+                      condition:
+                        lambda: "return id(simone_moisture).state > 25.0;"  # Check again after delay
+                      then:
+                        - lambda: |
+                            id(simone_happy_notified) = true;
+                            id(simone_needs_water_notified) = false;
+                        - script.execute:
+                            id: send_slack_message
+                            message: "✅ Simone (RDC) is happy! Watered and thriving again"
+    illuminance:
+      id: simone_light
+      name: "Simone's sensor light"
+    conductivity:
+      id: simone_conductivity
+      name: "Simone's sensor conductivity"
+    battery_level:
+      id: simone_battery_level
+      name: "Simone's sensor battery"
+
+  # Jean-Jacques's Sensors (Fifth)
+  - platform: xiaomi_hhccjcy01
+    mac_address: !secret jean_jacques_address
+    temperature:
+      id: jean_jacques_temperature
+      name: "Jean-Jacques's sensor temperature"
+    moisture:
+      id: jean_jacques_moisture
+      name: "Jean-Jacques's sensor moisture"
+      on_value_range:
+        - below: 19.5
+          then:
+            - if:
+                condition:
+                  lambda: "return !id(jean_jacques_needs_water_notified);"
+                then:
+                  - delay: 10s  # Debounce for 10 seconds before confirming low moisture
+                  - if:
+                      condition:
+                        lambda: "return id(jean_jacques_moisture).state < 19.5;"  # Check again after delay
+                      then:
+                        - lambda: |
+                            id(jean_jacques_needs_water_notified) = true;
+                            id(jean_jacques_happy_notified) = false;
+                        - script.execute:
+                            id: send_slack_message
+                            message: "🪴 Jean-Jacques (RDC) needs water! Moisture is below 20%"
+
+        - above: 25.0
+          then:
+            - if:
+                condition:
+                  lambda: "return !id(jean_jacques_happy_notified);"
+                then:
+                  - delay: 10s  # Debounce for 10 seconds before confirming recovery
+                  - if:
+                      condition:
+                        lambda: "return id(jean_jacques_moisture).state > 25.0;"  # Check again after delay
+                      then:
+                        - lambda: |
+                            id(jean_jacques_happy_notified) = true;
+                            id(jean_jacques_needs_water_notified) = false;
+                        - script.execute:
+                            id: send_slack_message
+                            message: "✅ Jean-Jacques (RDC) is happy! Watered and thriving again"
+    illuminance:
+      id: jean_jacqueslight
+      name: "Jean-Jacques's sensor light"
+    conductivity:
+      id: jean_jacquesconductivity
+      name: "Jean-Jacques's sensor conductivity"
+    battery_level:
+      id: jean_jacquesbattery_level
+      name: "Jean-Jacques's sensor battery"
+
