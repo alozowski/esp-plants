@@ -6,7 +6,7 @@ This ESPHome configuration runs on an ESP32 (M5Stack Atom) to monitor soil moist
 
 # Features
 - **Soil monitoring:** Tracks moisture, temperature, light, and conductivity for multiple plants.
-- **Automated alerts:** Sends Slack notifications when a plant needs watering (below 20% moisture) and when it recovers (above 25% moisture). Can be set up for each flower separately.
+- **Automated alerts:** Sends Slack notifications when a plant needs watering (below 19.5% moisture) and when it recovers (above 25% moisture). Can be set up for each flower separately.
 - **Debounced notifications:** Prevents excessive messages by introducing a 10-second delay before confirming moisture changes.
 - **State tracking:** Uses internal flags to ensure each notification is sent only once per watering cycle.
 - **Scheduled reports:** Posts a summary of sensor readings every Monday and Thursday at 10 AM.
@@ -32,9 +32,9 @@ Example output:
 /dev/cu.Bluetooth-Incoming-Port /dev/cu.debug-console           /dev/cu.usbserial-0000000000
 ```
 2. Detect Sensor MAC Addresses
-Each Xiaomi Mi Flora sensor has a unique MAC address. Detect them one by one using `address_detection.yaml`:
+Each Xiaomi Mi Flora sensor has a unique MAC address. Detect them one by one using `sensor_address_detection.yaml`:
 ```
-esphome run address_detection.yaml
+esphome run sensor_address_detection.yaml
 ```
 3. Configure secrets.yaml
 - Copy `secrets_template.yaml` to `secrets.yaml`.
@@ -46,7 +46,7 @@ Once everything is set, compile and upload the ESPHome configuration:
 esphome run config.yaml
 ```
 5. Monitor the Web Interface
-You can monitor the metrics using a webserver. It can be accessed by `<name>.local`. In this very case it's `http://esp32-mi-flora-3rd-floor.local`. You need to be connected to the same wifi as the esp32 controller.
+You can monitor the metrics using a webserver. It can be accessed by `<name>.local`. You need to be connected to the same wifi as the esp32 controller.
 
 > **NOTE:**  The ESP32 must be plugged into your computer during flashing. After flashing, it can run independently when connected to a power source.
 
