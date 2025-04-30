@@ -34,7 +34,7 @@ http_request:
   timeout: 10s
 
 logger:
-  level: DEBUG
+  level: WARN
 
 substitutions:
   slack_webhook_url: !secret slack_webhook_url
